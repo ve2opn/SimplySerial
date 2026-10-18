@@ -12,7 +12,7 @@ namespace SimplySerial
 {
     class SimplySerial
     {
-        const string version = "0.9.0";
+        const string version = "0.9.0-pg2";
 
         const string ConfigFile = "settings.cfg";
         const string CustomBoardFile = "custom_boards.json";
@@ -68,6 +68,7 @@ namespace SimplySerial
         static ConsoleKey exitKey = ConsoleKey.X;
         static bool localEcho = false;
         static bool bulkSend = false;
+        static bool lineBuffer = false;
 
         // dictionary of "special" keys with the corresponding string to send out when they are pressed
         static Dictionary<ConsoleKey, String> specialKeys = new Dictionary<ConsoleKey, String>
@@ -176,7 +177,7 @@ namespace SimplySerial
 
             // set up keyboard input for program control / relay to serial port
             ConsoleKeyInfo keyInfo = new ConsoleKeyInfo();
-            StringBuilder bulkSendBuffer = new StringBuilder();
+            StringBuilder lineBufferText = new StringBuilder();
             Console.TreatControlCAsInput = true; // we need to use CTRL-C to activate the REPL in CircuitPython, so it can't be used to exit the application
 
             // this is where data read from the serial port will be temporarily stored
@@ -349,7 +350,7 @@ namespace SimplySerial
                     (encoding.ToString() == "System.Text.UTF8Encoding") ? "UTF-8" : (convertToPrintable) ? "RAW" : "ASCII",
                     (autoConnect == AutoConnect.ONE) ? "on" : (autoConnect == AutoConnect.ANY) ? "any" : "off",
                     (localEcho) ? "on" : "off",
-                    (bulkSend) ? ", bulk send enabled" : "",
+                    ((bulkSend) ? ", bulk send enabled" : "") + ((lineBuffer) ? ", line buffer enabled" : ""),
                     port.board.make,
                     port.board.model,
                     (port.isCircuitPython) ? " (CircuitPython-capable)" : "",
@@ -381,27 +382,27 @@ namespace SimplySerial
                             }
 
                             // True line-buffered mode: transmit only after Enter.
-                            else if (bulkSend)
+                            else if (lineBuffer)
                             {
                                 if (keyInfo.Key == ConsoleKey.Enter)
                                 {
-                                    serialPort.Write(bulkSendBuffer.ToString() + specialKeys[ConsoleKey.Enter]);
-                                    bulkSendBuffer.Clear();
+                                    serialPort.Write(lineBufferText.ToString() + specialKeys[ConsoleKey.Enter]);
+                                    lineBufferText.Clear();
                                     if (localEcho)
                                         Output("\r\n", force: true, newline: false);
                                 }
                                 else if (keyInfo.Key == ConsoleKey.Backspace)
                                 {
-                                    if (bulkSendBuffer.Length > 0)
+                                    if (lineBufferText.Length > 0)
                                     {
-                                        bulkSendBuffer.Length--;
+                                        lineBufferText.Length--;
                                         if (localEcho)
                                             Output("\b \b", force: true, newline: false);
                                     }
                                 }
                                 else if (!char.IsControl(keyInfo.KeyChar))
                                 {
-                                    bulkSendBuffer.Append(keyInfo.KeyChar);
+                                    lineBufferText.Append(keyInfo.KeyChar);
                                     if (localEcho)
                                         Output(keyInfo.KeyChar.ToString(), force: true, newline: false);
                                 }
@@ -774,6 +775,11 @@ namespace SimplySerial
             bulkSend = ArgProcessor_OnOff(value);
         }
 
+        static void ArgHandler_LineBuffer(string value)
+        {
+            lineBuffer = ArgProcessor_OnOff(value);
+        }
+
         static void ArgHandler_UpdateBoards(string value)
         {
             BoardManager.Update();
@@ -928,6 +934,7 @@ namespace SimplySerial
             CommandLineArguments.Add("encoding", new CommandLineArgument("encoding", handler: ArgHandler_Encoding, priority: 11)); // process encoding before any other 'e' commands
             CommandLineArguments.Add("title", new CommandLineArgument("title", handler: ArgHandler_Title, priority: 12));
             CommandLineArguments.Add("bulksend", new CommandLineArgument("bulksend", handler: ArgHandler_BulkSend));
+            CommandLineArguments.Add("linebuffer", new CommandLineArgument("linebuffer", handler: ArgHandler_LineBuffer));
             CommandLineArguments.Add("clearscreen", new CommandLineArgument(new[] { "clearscreen", "noclear" }, handler: ArgHandler_ClearScreen));
             CommandLineArguments.Add("config", new CommandLineArgument(new[] { "config", "input" }, handler: null));
             CommandLineArguments.Add("databits", new CommandLineArgument("databits", handler: ArgHandler_DataBits));
@@ -1097,7 +1104,8 @@ namespace SimplySerial
             Console.WriteLine("  -status:VAL       ON | OFF enable/disable status/title updates from virtual terminal sequences.");
             Console.WriteLine("  -exitkey:KEY      Specify a key to use along with CTRL for exiting the program (default is 'X').");
             Console.WriteLine("  -title:\"TITLE\"  Set the console window title.  Surround with quotation marks if your title has spaces.");
-            Console.WriteLine("  -bulksend:VAL     ON | OFF line-buffered send (transmit typed/pasted text on Enter).");
+            Console.WriteLine("  -bulksend:VAL     ON | OFF process all currently queued keystrokes per loop (original behavior).");
+            Console.WriteLine("  -linebuffer:VAL   ON | OFF buffer typed/pasted text until Enter; supports Backspace.");
             Console.WriteLine("  -txonenter:VAL    CR | LF | CRLF | CUSTOM=\"CustomString\" | BYTES=\"custom sequence of bytes\", each byte must be expressed by 2 chars.");
             Console.WriteLine("                    Bytes sequence must be a hexadecimal value with or without leading 0x and separated or not by spaces.");
             Console.WriteLine("                    Determines what character(s) will be sent when the enter key is pressed.");
