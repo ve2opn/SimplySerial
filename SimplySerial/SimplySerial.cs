@@ -176,6 +176,7 @@ namespace SimplySerial
 
             // set up keyboard input for program control / relay to serial port
             ConsoleKeyInfo keyInfo = new ConsoleKeyInfo();
+            StringBuilder bulkSendBuffer = new StringBuilder();
             Console.TreatControlCAsInput = true; // we need to use CTRL-C to activate the REPL in CircuitPython, so it can't be used to exit the application
 
             // this is where data read from the serial port will be temporarily stored
@@ -379,15 +380,40 @@ namespace SimplySerial
                                 ExitProgram(silent: true);
                             }
 
-                            // check for keys that require special processing (cursor keys, etc.)
+                            // True line-buffered mode: transmit only after Enter.
+                            else if (bulkSend)
+                            {
+                                if (keyInfo.Key == ConsoleKey.Enter)
+                                {
+                                    serialPort.Write(bulkSendBuffer.ToString() + specialKeys[ConsoleKey.Enter]);
+                                    bulkSendBuffer.Clear();
+                                    if (localEcho)
+                                        Output("\r\n", force: true, newline: false);
+                                }
+                                else if (keyInfo.Key == ConsoleKey.Backspace)
+                                {
+                                    if (bulkSendBuffer.Length > 0)
+                                    {
+                                        bulkSendBuffer.Length--;
+                                        if (localEcho)
+                                            Output("\b \b", force: true, newline: false);
+                                    }
+                                }
+                                else if (!char.IsControl(keyInfo.KeyChar))
+                                {
+                                    bulkSendBuffer.Append(keyInfo.KeyChar);
+                                    if (localEcho)
+                                        Output(keyInfo.KeyChar.ToString(), force: true, newline: false);
+                                }
+                                // Other control/navigation keys are intentionally ignored in line mode.
+                            }
+                            // Original immediate-transmit mode remains unchanged.
                             else if (specialKeys.ContainsKey(keyInfo.Key))
                             {
                                 serialPort.Write(specialKeys[keyInfo.Key]);
                                 if (localEcho)
                                     Output(specialKeys[keyInfo.Key], force: true, newline: false);
                             }
-
-                            // everything else just gets sent right on through
                             else
                             {
                                 string outstring = keyInfo.KeyChar.ToString();
@@ -1071,7 +1097,7 @@ namespace SimplySerial
             Console.WriteLine("  -status:VAL       ON | OFF enable/disable status/title updates from virtual terminal sequences.");
             Console.WriteLine("  -exitkey:KEY      Specify a key to use along with CTRL for exiting the program (default is 'X').");
             Console.WriteLine("  -title:\"TITLE\"  Set the console window title.  Surround with quotation marks if your title has spaces.");
-            Console.WriteLine("  -bulksend:VAL     ON | OFF enable or disable bulk send mode (send all characters typed/pasted at once).");
+            Console.WriteLine("  -bulksend:VAL     ON | OFF line-buffered send (transmit typed/pasted text on Enter).");
             Console.WriteLine("  -txonenter:VAL    CR | LF | CRLF | CUSTOM=\"CustomString\" | BYTES=\"custom sequence of bytes\", each byte must be expressed by 2 chars.");
             Console.WriteLine("                    Bytes sequence must be a hexadecimal value with or without leading 0x and separated or not by spaces.");
             Console.WriteLine("                    Determines what character(s) will be sent when the enter key is pressed.");
