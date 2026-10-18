@@ -1,0 +1,35 @@
+name: Build SimplySerial
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'SimplySerial/**'
+      - '.github/workflows/build.yml'
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore NuGet dependency
+        shell: pwsh
+        run: |
+          nuget restore SimplySerial/packages.config -PackagesDirectory SimplySerial/packages -NonInteractive
+
+      - name: Build application (exclude Advanced Installer projects)
+        shell: pwsh
+        run: |
+          msbuild SimplySerial/SimplySerial.csproj /m /p:Configuration=Release /p:Platform=AnyCPU /p:RestorePackages=false /verbosity:minimal
+
+      - name: Upload standalone ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: SimplySerial-Windows-Release
+          path: SimplySerial/bin/Release/SimplySerial_standalone.zip
+          if-no-files-found: error
